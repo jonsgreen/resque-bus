@@ -4,7 +4,7 @@ require 'redis/namespace'
 require 'resque'
 
 module ResqueBus
-  
+
   autoload :Application,      'resque_bus/application'
   autoload :Dispatch,         'resque_bus/dispatch'
   autoload :Driver,           'resque_bus/driver'
@@ -20,19 +20,19 @@ module ResqueBus
   autoload :Util,             'resque_bus/util'
 
   class << self
-    
+
     def default_app_key=val
       @default_app_key = Application.normalize(val)
     end
-    
+
     def default_app_key
       @default_app_key
     end
-    
+
     def default_queue=val
       @default_queue = val
     end
-    
+
     def default_queue
       @default_queue
     end
@@ -40,24 +40,24 @@ module ResqueBus
     def hostname
       @hostname ||= `hostname 2>&1`.strip.sub(/.local/,'')
     end
-    
+
     def dispatch(app_key=nil, &block)
       dispatcher = dispatcher_by_key(app_key)
       dispatcher.instance_eval(&block)
       dispatcher
     end
-    
+
     def dispatchers
       @dispatchers ||= {}
       @dispatchers.values
     end
-    
+
     def dispatcher_by_key(app_key)
       app_key = Application.normalize(app_key || default_app_key)
       @dispatchers ||= {}
       @dispatchers[app_key] ||= Dispatch.new(app_key)
     end
-    
+
     def dispatcher_execute(app_key, key, attributes)
       @dispatchers ||= {}
       dispatcher = @dispatchers[app_key]
@@ -71,7 +71,7 @@ module ResqueBus
     def local_mode
       @local_mode
     end
-    
+
     def heartbeat!
       # turn on the heartbeat
       # should be down after loading scheduler yml if you do that
@@ -87,6 +87,14 @@ module ResqueBus
         Resque.set_schedule(name, schedule)
       end
       Resque.schedule[name] = schedule
+    end
+
+    def busline=(line)
+      @busline = line
+    end
+
+    def busline
+      @busline ||= Resque
     end
 
     # Accepts:
@@ -126,23 +134,23 @@ module ResqueBus
       self.redis = copy
       self.redis
     end
-    
+
     def original_redis=(server)
       @original_redis = server
     end
     def original_redis
       @original_redis
     end
-    
+
     def with_global_attributes(attributes)
       original_timezone = false
       original_locale   = false
-      
+
       if attributes["bus_locale"] && defined?(I18n) && I18n.respond_to?(:locale=)
         original_locale = I18n.locale if I18n.respond_to?(:locale)
         I18n.locale = attributes["bus_locale"]
       end
-      
+
       if attributes["bus_timezone"] && defined?(Time) && Time.respond_to?(:zone=)
         original_timezone = Time.zone if Time.respond_to?(:zone)
         Time.zone = attributes["bus_timezone"]
@@ -164,7 +172,7 @@ module ResqueBus
       end
     end
 
-    
+
     def publish_metadata(event_type, attributes={})
       # TODO: "bus_app_key" => application.app_key ?
       bus_attr = {"bus_published_at" => Time.now.to_i, "bus_event_type" => event_type}
@@ -176,11 +184,11 @@ module ResqueBus
       ResqueBus.before_publish_callback(out)
       out
     end
-    
+
     def generate_uuid
       require 'securerandom' unless defined?(SecureRandom)
       return SecureRandom.uuid
-      
+
       rescue Exception => e
         # secure random not there
         # big random number a few times
@@ -189,7 +197,7 @@ module ResqueBus
         max = 2 ** (n_bits - 2) - 1
         return "#{rand(max)}-#{rand(max)}-#{rand(max)}"
     end
-    
+
     def publish(event_type, attributes = {})
       to_publish = publish_metadata(event_type, attributes)
       ResqueBus.log_application("Event published: #{event_type} #{to_publish.inspect}")
@@ -199,45 +207,45 @@ module ResqueBus
         enqueue_to(incoming_queue, Driver, to_publish)
       end
     end
-    
+
     def publish_at(timestamp_or_epoch, event_type, attributes = {})
       to_publish = publish_metadata(event_type, attributes)
       to_publish["bus_delayed_until"] ||= timestamp_or_epoch.to_i
       to_publish.delete("bus_published_at") unless attributes["bus_published_at"] # will be put on when it actually does it
-      
+
       ResqueBus.log_application("Event published:#{event_type} #{to_publish.inspect} publish_at: #{timestamp_or_epoch.to_i}")
       item = delayed_job_to_hash_with_queue(incoming_queue, Publisher, [event_type, to_publish])
       delayed_push(timestamp_or_epoch, item)
     end
-    
+
     def enqueue_to(queue, klass, *args)
       push(queue, :class => klass.to_s, :args => args)
     end
-    
+
     def logger
       @logger
     end
-    
+
     def logger=val
       @logger = val
     end
-    
+
     def log_application(message)
       if logger
         time = Time.now.strftime('%H:%M:%S %Y-%m-%d')
         logger.info("** [#{time}] #$$: ResqueBus #{message}")
       end
     end
-    
+
     def log_worker(message)
       if ENV['LOGGING'] || ENV['VERBOSE'] || ENV['VVERBOSE']
         time = Time.now.strftime('%H:%M:%S %Y-%m-%d')
         puts "** [#{time}] #$$: #{message}"
       end
     end
-    
+
     protected
-    
+
     def reset
       # used by tests
       @redis = nil # clear instance of redis
@@ -246,7 +254,7 @@ module ResqueBus
       @default_queue = nil
       @before_publish_callback = nil
     end
-    
+
     def incoming_queue
       "resquebus_incoming"
     end
@@ -255,9 +263,9 @@ module ResqueBus
       # It might play better on the same server, but overall life is more complicated
       :resque
     end
-    
+
     ## From Resque, but using a (possibly) different instance of Redis
-    
+
     # Pushes a job onto a queue. Queue name should be a string and the
     # item should be any JSON-able Ruby object.
     #
@@ -277,13 +285,13 @@ module ResqueBus
       watch_queue(queue)
       redis.rpush "queue:#{queue}", Resque.encode(item)
     end
-    
+
     # Used internally to keep track of which queues we've created.
     # Don't call this directly.
     def watch_queue(queue)
       redis.sadd(:queues, queue.to_s)
     end
-    
+
     ### From Resque Scheduler
     # Used internally to stuff the item into the schedule sorted list.
     # +timestamp+ can be either in seconds or a datetime object
@@ -298,10 +306,10 @@ module ResqueBus
       # anything else to store.
       redis.zadd :delayed_queue_schedule, timestamp.to_i, timestamp.to_i
     end
-    
+
     def delayed_job_to_hash_with_queue(queue, klass, args)
       {:class => klass.to_s, :args => args, :queue => queue}
     end
   end
-  
+
 end
