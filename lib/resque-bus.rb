@@ -261,7 +261,7 @@ module ResqueBus
 
     def default_namespace
       # It might play better on the same server, but overall life is more complicated
-      :resque
+      #:resque
     end
 
     ## From Resque, but using a (possibly) different instance of Redis

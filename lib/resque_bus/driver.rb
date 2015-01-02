@@ -2,6 +2,14 @@ module ResqueBus
   # fans out an event to multiple queues
   class Driver
 
+    if ResqueBus.busline == Sidekiq
+      include Sidekiq::Worker
+
+      def perform(attributes)
+        self.class.perform(attributes)
+      end
+    end
+
     class << self
       def subscription_matches(attributes)
         out = []
@@ -19,7 +27,7 @@ module ResqueBus
 
         subscription_matches(attributes).each do |sub|
           ResqueBus.log_worker("  ...sending to #{sub.queue_name} queue with class #{sub.class_name} for app #{sub.app_key} because of subscription: #{sub.key}")
-          
+
           bus_attr = {"bus_driven_at" => Time.now.to_i, "bus_rider_queue" => sub.queue_name, "bus_rider_app_key" => sub.app_key, "bus_rider_sub_key" => sub.key, "bus_rider_class_name" => sub.class_name}
           ResqueBus.enqueue_to(sub.queue_name, sub.class_name, bus_attr.merge(attributes || {}))
         end

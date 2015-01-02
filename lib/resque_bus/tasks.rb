@@ -31,16 +31,20 @@ namespace :resquebus do
   end
 
   desc "Start the background processor for ResqueBus"
-  task :work => [:setup] do
+  task :work, :required_files do |t, args|
     if ResqueBus.busline == Sidekiq
       queues = ENV['QUEUES'].split(',').map {|q| "-q #{q}"}.join(' ')
       puts "booting Sidekiq"
-      `sidekiq  #{queues}`
+      req = args[:required_files] ? "-r #{args[:required_files]} " : ''
+      exec("bundle exec sidekiq #{req}#{queues}")
     else
       puts "booting Resque"
-      Rake::Task["resque:work"].invoke
+      exec("rake resque:work")
     end
   end
+
+  desc "Start the background Riders"
+  task :riders, [:required_files] => [:setup, :work]
 
   desc "Unsubscribes this application from ResqueBus events"
   task :unsubscribe => [ :preload ] do
@@ -51,8 +55,9 @@ namespace :resquebus do
   end
 
   desc "Sets the queue to work the driver  Use: `rake resquebus:driver resque:work`"
-  task :driver => [ :preload ] do
+  task :driver, [:required_files] => [ :preload ] do |t, args|
     ENV['QUEUES'] = "resquebus_incoming"
+    task('resquebus:work').invoke(args[:required_files])
   end
 
   # Preload app files if this is Rails
